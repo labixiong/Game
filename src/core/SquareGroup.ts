@@ -11,6 +11,9 @@ export class SquareGroup {
   // private _squares: ReadonlyArray<Square> = []
   private _squares: readonly Square[] = []
 
+  // 旋转方向是否为顺时针，true表示顺时针，false表示逆时针
+  protected isClock: boolean = true
+
   public get squares() {
     return this._squares
   }
@@ -25,15 +28,12 @@ export class SquareGroup {
     this._centerPoint = v;
 
     // 修改中心点的同时需要同步更改方块组中每个方块的坐标
-    this._shape.forEach((s, i) => {
-      this._squares[i].point = {
-        x: this._centerPoint.x + s.x,
-        y: this._centerPoint.y + s.y
-      }
-    })
+    this.setSquarePoints()
   }
 
-
+  public get shape() {
+    return this._shape
+  }
 
   constructor(
     private _shape: Shape, // 形状，坐标数组,传入相对方块组坐标的数组
@@ -45,15 +45,57 @@ export class SquareGroup {
     this._shape.forEach(s => {
       const sq = new Square()
       sq.color = this._color
-      sq.point = {
-        x: this._centerPoint.x + s.x,
-        y: this._centerPoint.y + s.y
-      }
-
       arr.push(sq)
     })
 
     this._squares = arr
+    this.setSquarePoints()
+  }
+
+
+  /**
+   * 根据旋转方向isClock来得到新的形状
+   * 
+   * 只是计算形状,并未真正发生旋转
+   */
+  afterRotateShape(): Shape {
+    // 顺时针旋转得到的规律
+    // 之前的x，y坐标旋转过后的坐标是 -y，x
+    if (this.isClock) {
+      return this._shape.map(s => {
+        return {
+          x: -s.y,
+          y: s.x
+        }
+      })
+    } else {
+      // 逆时针旋转的规律是x,y 旋转过后是y, -x
+      return this._shape.map(s => {
+        return {
+          x: s.y,
+          y: -s.x
+        }
+      })
+    }
+  }
+
+  // 根据中心点坐标以及形状来重新设置每个方块的坐标
+  private setSquarePoints() {
+    this._shape.forEach((p, i) => {
+      this._squares[i].point = {
+        x: this._centerPoint.x + p.x,
+        y: this._centerPoint.y + p.y
+      }
+    })
+  }
+
+
+  // 旋转函数
+  rotate() {
+    const newShape = this.afterRotateShape()
+    this._shape = newShape
+
+    this.setSquarePoints()
   }
 
 }

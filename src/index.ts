@@ -1,17 +1,29 @@
-import { createTeris } from "./core/Teris";
-import { SquarePageViewer } from "./core/viewer/SquarePageViewer";
+import { Game } from "./core/Game";
+import { GamePageViewer } from "./core/viewer/GamePageViewer";
 import $ from 'jquery'
 
-const teris = createTeris({ x: 3, y: 2 })
+const g = new Game(new GamePageViewer())
 
-teris.squares.forEach(sq => {
-  sq.viewer = new SquarePageViewer(sq, $('#root'))
+$('#btnStart').click(function () {
+  g.start()
+})
+
+$('#btnPause').click(function () {
+  g.pause()
+})
+
+$("#btnLeft").click(function () {
+  g.controlLeft();
+})
+
+$("#btnRight").click(function () {
+  g.controlRight();
 })
 
 $("#btnDown").click(function () {
-  // 向下移动只需要改变方块组的中心点即可
-  teris.centerPoint = {
-    x: teris.centerPoint.x,
-    y: teris.centerPoint.y + 1
-  }
+  g.controlDown();
+})
+
+$("#btnRotate").click(function () {
+  g.controlRotate();
 })
