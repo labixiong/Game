@@ -12,18 +12,68 @@ export class Game {
   // 当前玩家操作的方块, 初始化状态下未操作任何方块，所以设置为可选参数
   private _curTeris?: SquareGroup
 
+  // 方块下落的时间间隔
+  private _duration: number;
+
   // 下一个方块
   private _nextTeris: SquareGroup = createTeris({ x: 0, y: 0 })
 
   // 自动下落计时器
   private _timer?: number
 
-  // 自动下落的时间有可能随着游戏的难度或者积分的高低而递减
-  private _duration: number = 1000
-
   // 当前游戏中,已存在的小方块
   // 这里不设置类型SquareGroup的原因是还需要进行消除,作为单个方块的数组比较好处理
   private _exists: Square[] = []
+
+  // 积分
+  private _score: number = 0
+
+
+  // 访问器
+  public get gameStatus() {
+    return this._gameStatus
+  }
+
+  public get score() {
+    return this._score;
+  }
+  public set score(val) {
+    this._score = val;
+    this._viewer.showScore(val);
+    const level = GameConfig.levels.filter(it => it.score <= val).pop()!;
+    if (level.duration === this._duration) {
+      return;
+    }
+    this._duration = level.duration;
+    if (this._timer) {
+      clearInterval(this._timer);
+      this._timer = undefined;
+      this.autoDown();
+    }
+  }
+
+
+  private createNext() {
+    this._nextTeris = createTeris({ x: 0, y: 0 });
+    this.resetCenterPoint(GameConfig.nextSize.width, this._nextTeris);
+    this._viewer.showNext(this._nextTeris);
+  }
+
+  /**
+   * 初始化函数
+   */
+  private init() {
+    // 清空界面
+    this._exists.forEach(e => {
+      e.viewer && e.viewer.remove()
+    })
+    this._exists = []
+    this.createNext()
+    // 要重新设置为undefined
+    // 因为在start函数内部会判断当前有没有值，没有值才会进行切换方块，否则当结束再开始时就会出现不了方块
+    this._curTeris = undefined
+    this.score = 0
+  }
 
 
   /**
@@ -33,6 +83,11 @@ export class Game {
     // 1. 改变当前状态为开始状态
     if (this._gameStatus === GameStatus.playing) {
       return
+    }
+
+    // 游戏开始前需要进行一些初始化操作
+    if (this._gameStatus === GameStatus.over) {
+      this.init()
     }
 
     this._gameStatus = GameStatus.playing
@@ -45,6 +100,7 @@ export class Game {
 
     // 3. 方块组自动下落
     this.autoDown()
+    this._viewer.onGameStart();
   }
 
   /**
@@ -56,6 +112,7 @@ export class Game {
       this._gameStatus = GameStatus.pause
       clearInterval(this._timer)
       this._timer = undefined
+      this._viewer.onGamePause();
     }
   }
 
@@ -86,9 +143,13 @@ export class Game {
 
   // 在项目最开始的时候,面板内没有内容,但是下一个方块组已经出现了,所以需要把下一个方块显示出来
   constructor(private _viewer: GameViewer) {
+    this._duration = GameConfig.levels[0].duration
     // 游戏最开始的时候，产生下一个方块的时候要重新设置中心点坐标，因为有可能下一个方块会出界
-    this.resetCenterPoint(GameConfig.nextSize.width, this._nextTeris)
-    this._viewer.showNext(this._nextTeris)
+    this._nextTeris = createTeris({ x: 0, y: 0 })
+    this.createNext()
+
+    // 初始化界面
+    this._viewer.init(this)
   }
 
   /**
@@ -96,15 +157,33 @@ export class Game {
    */
   private switchTeris() {
     this._curTeris = this._nextTeris
+    this._curTeris.squares.forEach(sq => {
+      if (sq.viewer) {
+        sq.viewer.remove()
+      }
+    })
     // 重新设置中心点，保证游戏面板中的模块在面板中心落下
     this.resetCenterPoint(GameConfig.panelSize.width, this._curTeris)
-    this._nextTeris = createTeris({ x: 0, y: 0 })
-    // 重新设置中心点，保证右侧面板中的下一个方块组不会越界到游戏面板中
-    this.resetCenterPoint(GameConfig.nextSize.width, this._nextTeris)
+
+    // 有可能出现问题：当方块一出现时，就已经和之前的方块重叠了，代表游戏已经结束
+    if (!TerisRule.canIMove(this._curTeris.shape, this._curTeris.centerPoint, this._exists)) {
+      // 此时游戏结束
+      this._gameStatus = GameStatus.over
+      clearInterval(this._timer)
+      this._timer = undefined
+      this._viewer.onGameOver()
+      return
+    }
+
+    this.createNext()
+
+    // this._nextTeris = createTeris({ x: 0, y: 0 })
+    // // 重新设置中心点，保证右侧面板中的下一个方块组不会越界到游戏面板中
+    // this.resetCenterPoint(GameConfig.nextSize.width, this._nextTeris)
+    // // 切换过后,此时新的方块已经产生了
+    // this._viewer.showNext(this._nextTeris)
     // 切换的时候将当前的方块显示出来,因为当前方块已经赋值为下一个方块
     this._viewer.switch(this._curTeris)
-    // 切换过后,此时新的方块已经产生了
-    this._viewer.showNext(this._nextTeris)
   }
 
   /**
@@ -143,12 +222,10 @@ export class Game {
     // 如果有小方块的y坐标小于0，则说明需要向下移动
     // 此处有可能出现死循环，所以需要强制改变y坐标的值，不能通过TerisRule.move(teris, MoveDirection.down)这样的方式向下移动
     while (teris.squares.some(sq => sq.point.y < 0)) {
-      teris.squares.forEach(sq => {
-        sq.point = {
-          x: sq.point.x,
-          y: sq.point.y + 1
-        }
-      })
+      teris.centerPoint = {
+        x: teris.centerPoint.x,
+        y: teris.centerPoint.y + 1
+      }
     }
   }
 
@@ -162,8 +239,31 @@ export class Game {
     this._exists.push(...this._curTeris!.squares)
     // 得到消除行的数量(即消除了几行)
     const num = TerisRule.deleteSquares(this._exists)
+    // 增加积分
+    this.addScore(num)
     // 切换方块,继续下落
     this.switchTeris()
+  }
+
+  /**
+   * 计算积分
+   */
+  addScore(lineNum: number) {
+    if (lineNum === 0) {
+      return;
+    }
+    else if (lineNum === 1) {
+      this.score += 10;
+    }
+    else if (lineNum === 2) {
+      this.score += 25;
+    }
+    else if (lineNum === 3) {
+      this.score += 50;
+    }
+    else {
+      this.score += 100;
+    }
   }
 
 }

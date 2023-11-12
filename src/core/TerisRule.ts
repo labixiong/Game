@@ -17,7 +17,7 @@ export class TerisRule {
   /**
    * 判断某个形状的方块是否能移动到目标位置
    */
-  private static canIMove(shape: Shape, targetPoint: Point, exists: Square[]): boolean {
+  static canIMove(shape: Shape, targetPoint: Point, exists: Square[]): boolean {
     // 需要判断多种情况
     // 1. 边界判断
     // 假设已经移动到了目标位置targetPoint，先算出当前形状下所有格子的坐标
@@ -130,18 +130,18 @@ export class TerisRule {
         if (sq.viewer) {
           sq.viewer.remove()
         }
-
-        // 改变其余在消除行上方的方块y坐标
-        exists.filter(e => e.point.y < y).forEach(e => {
-          e.point = {
-            x: e.point.x,
-            y: e.point.y + 1
-          }
-        })
-
         // 从数据中删除
         exists.splice(exists.indexOf(sq), 1)
       })
+
+      // 改变其余在消除行上方的方块y坐标
+      exists.filter(e => e.point.y < y).forEach(e => {
+        e.point = {
+          x: e.point.x,
+          y: e.point.y + 1
+        }
+      })
+
 
       return true
     }
